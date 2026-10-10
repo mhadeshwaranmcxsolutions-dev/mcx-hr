@@ -164,7 +164,9 @@ export default function LeavePage() {
 
     const requestsQuery = supabase
       .from("leave_requests")
-      .select("*, employees(first_name, last_name)")
+      .select(
+        "*, employees!leave_requests_employee_id_fkey(first_name, last_name)"
+      )
       .order("created_at", { ascending: false });
 
     const myReq = employee
@@ -173,7 +175,9 @@ export default function LeavePage() {
 
     const allReq = supabase
       .from("leave_requests")
-      .select("*, employees(first_name, last_name)")
+      .select(
+        "*, employees!leave_requests_employee_id_fkey(first_name, last_name)"
+      )
       .order("created_at", { ascending: false });
 
     const [myRes, allRes] = await Promise.all([myReq, allReq]);
