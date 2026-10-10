@@ -28,6 +28,7 @@ const BackButton = () => (
 const ROLES: Role[] = ["admin", "hr", "manager", "employee"];
 
 const PAGES = [
+  { path: "/landing", label: "Landing Page" },
   { path: "/dashboard", label: "Dashboard" },
   { path: "/employees", label: "Employees" },
   { path: "/org-chart", label: "Org Chart" },
@@ -57,7 +58,18 @@ interface FormState {
   department_id: string;
   position_id: string;
   salary: string;
+  landing_page: string;
 }
+
+const LANDING_PAGE_OPTIONS = [
+  { path: "/landing", label: "Landing Page" },
+  { path: "/dashboard", label: "Dashboard" },
+  { path: "/employees", label: "Employees" },
+  { path: "/attendance", label: "Attendance" },
+  { path: "/leave", label: "Leave" },
+  { path: "/payroll", label: "Payroll" },
+  { path: "/reports", label: "Reports" },
+];
 
 const emptyForm: FormState = {
   email: "",
@@ -69,6 +81,7 @@ const emptyForm: FormState = {
   department_id: "",
   position_id: "",
   salary: "0",
+  landing_page: "/dashboard",
 };
 
 export default function UserManagementPage() {
@@ -130,6 +143,7 @@ export default function UserManagementPage() {
       department_id: emp.department_id || "",
       position_id: emp.position_id || "",
       salary: String(emp.salary || 0),
+      landing_page: emp.landing_page || "/dashboard",
     });
     setError(null);
     setShowForm(true);
@@ -149,6 +163,7 @@ export default function UserManagementPage() {
         department_id: form.department_id || null,
         position_id: form.position_id || null,
         salary: Number(form.salary) || 0,
+        landing_page: form.landing_page || "/dashboard",
       };
       if (form.password) payload.password = form.password;
 
@@ -183,6 +198,7 @@ export default function UserManagementPage() {
           department_id: form.department_id || null,
           position_id: form.position_id || null,
           salary: Number(form.salary) || 0,
+          landing_page: form.landing_page || "/dashboard",
         }),
       });
       const data = await res.json();
@@ -390,6 +406,11 @@ export default function UserManagementPage() {
               </div>
               <Field label="Salary (RM)">
                 <input type="number" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} className={inputClass} />
+              </Field>
+              <Field label="Default Landing Page">
+                <select value={form.landing_page} onChange={(e) => setForm({ ...form, landing_page: e.target.value })} className={inputClass}>
+                  {LANDING_PAGE_OPTIONS.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}
+                </select>
               </Field>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
                 <button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>

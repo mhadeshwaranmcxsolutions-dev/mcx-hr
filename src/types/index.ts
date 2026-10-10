@@ -36,6 +36,7 @@ export interface Employee {
   hire_date: string;
   salary: number;
   avatar_url: string | null;
+  landing_page: string | null;
   created_at: string;
 }
 

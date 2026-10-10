@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import type { Permission, Role } from "@/types";
 
 const ALL_PAGES = [
+  "/landing",
   "/dashboard",
   "/employees",
   "/org-chart",

@@ -9,6 +9,7 @@ import { usePermissions } from "@/lib/permissions";
 import type { Notification } from "@/types";
 
 const navItems = [
+  { href: "/landing", label: "Landing", icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10" },
   { href: "/dashboard", label: "Dashboard", icon: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" },
   { href: "/employees", label: "Employees", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm13 14v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
   { href: "/org-chart", label: "Org Chart", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M19 3.13a4 4 0 0 1 0 7.75" },
@@ -54,6 +55,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { canAccess } = usePermissions(role, employeeId);
 
   const visibleNavItems = navItems.filter((item) => canAccess(item.href));
+
+  const basePath = "/" + (pathname || "").split("/").filter(Boolean)[0] || "/dashboard";
+  const hasAccess = canAccess(basePath);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -177,7 +181,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto scrollbar-thin p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto scrollbar-thin p-6">
+          {hasAccess ? children : (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <svg viewBox="0 0 24 24" className="mx-auto h-16 w-16 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+                </svg>
+                <h2 className="mt-4 text-xl font-bold text-brand-navy">Access Denied</h2>
+                <p className="mt-2 text-sm text-slate-500">You don't have permission to access this page.</p>
+                <Link href="/dashboard" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-orange px-5 py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-orangeDark">
+                  Go to Dashboard
+                </Link>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );

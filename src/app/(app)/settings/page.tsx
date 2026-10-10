@@ -22,15 +22,9 @@ const tabs = [
     icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm13 14v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   },
   {
-    href: "/settings/permissions",
-    label: "Permissions",
-    desc: "Control page access by role",
-    icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4",
-  },
-  {
     href: "/settings/users",
     label: "User Management",
-    desc: "Create users, set roles & permissions",
+    desc: "Create users, set roles & departments",
     icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M19 3.13a4 4 0 0 1 0 7.75M19 8v6M22 11h-6",
   },
 ];
