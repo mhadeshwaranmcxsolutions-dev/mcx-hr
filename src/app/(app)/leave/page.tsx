@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import type { Employee, LeaveRequest, LeaveStatus, LeaveType } from "@/types";
+import type { Employee, LeaveBalance, LeaveRequest, LeaveStatus, LeaveType } from "@/types";
 
 interface LeaveWithEmployee extends LeaveRequest {
   employees: { first_name: string; last_name: string } | null;
@@ -130,6 +130,7 @@ export default function LeavePage() {
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
   const [allRequests, setAllRequests] = useState<LeaveWithEmployee[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | LeaveStatus>("all");
+  const [myBalance, setMyBalance] = useState<LeaveBalance | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +191,29 @@ export default function LeavePage() {
 
     setMyRequests((myRes.data as LeaveRequest[]) || []);
     setAllRequests((allRes.data as LeaveWithEmployee[]) || []);
+
+    if (employee) {
+      const year = new Date().getFullYear();
+      const balRes = await supabase
+        .from("leave_balances")
+        .select("*")
+        .eq("employee_id", employee.id)
+        .eq("year", year)
+        .maybeSingle();
+      if (!balRes.error && balRes.data) {
+        setMyBalance(balRes.data as LeaveBalance);
+      } else if (!balRes.data) {
+        const createRes = await supabase
+          .from("leave_balances")
+          .insert({ employee_id: employee.id, year })
+          .select()
+          .single();
+        if (!createRes.error && createRes.data) {
+          setMyBalance(createRes.data as LeaveBalance);
+        }
+      }
+    }
+
     setLoading(false);
   };
 
@@ -253,6 +277,9 @@ export default function LeavePage() {
     setActioningId(request.id);
     setActionError(null);
 
+    const days = daysBetween(request.start_date, request.end_date);
+    const field = request.type === "sick" ? "sick_used" : request.type === "personal" ? "personal_used" : request.type === "annual" ? "annual_used" : null;
+
     const { error: err } = await supabase
       .from("leave_requests")
       .update({ status: "approved", approved_by: currentEmployee.id })
@@ -262,6 +289,22 @@ export default function LeavePage() {
       setActionError(err.message);
       setActioningId(null);
       return;
+    }
+
+    if (field) {
+      const balRes = await supabase
+        .from("leave_balances")
+        .select("*")
+        .eq("employee_id", request.employee_id)
+        .eq("year", new Date().getFullYear())
+        .maybeSingle();
+      if (balRes.data) {
+        const current = (balRes.data as Record<string, number>)[field] || 0;
+        await supabase
+          .from("leave_balances")
+          .update({ [field]: current + days })
+          .eq("id", balRes.data.id);
+      }
     }
 
     setAllRequests((prev) =>
@@ -361,6 +404,29 @@ export default function LeavePage() {
       {actionError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {actionError}
+        </div>
+      )}
+
+      {activeTab === "my" && myBalance && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[
+            { label: "Annual Leave", total: myBalance.annual_total, used: myBalance.annual_used, color: "blue" },
+            { label: "Sick Leave", total: myBalance.sick_total, used: myBalance.sick_used, color: "rose" },
+            { label: "Personal Leave", total: myBalance.personal_total, used: myBalance.personal_used, color: "purple" },
+          ].map((b) => {
+            const remaining = b.total - b.used;
+            const pct = b.total > 0 ? Math.min(100, Math.round((b.used / b.total) * 100)) : 0;
+            return (
+              <div key={b.label} className="rounded-2xl bg-white p-5 shadow-card">
+                <p className="text-sm font-medium text-slate-500">{b.label}</p>
+                <p className="mt-1 text-3xl font-bold text-brand-navy">{remaining}<span className="text-base font-normal text-slate-400"> / {b.total} days</span></p>
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${pct > 80 ? "bg-red-400" : pct > 50 ? "bg-amber-400" : "bg-brand-orange"}`} style={{ width: `${pct}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-slate-400">{b.used} used · {remaining} remaining</p>
+              </div>
+            );
+          })}
         </div>
       )}
 

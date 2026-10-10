@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Payroll, Employee } from "@/types";
+import type { Payroll, Employee, BonusAllowance } from "@/types";
 
 interface PayrollRow extends Payroll {
   employees: { first_name: string; last_name: string } | null;
@@ -147,6 +147,15 @@ export default function PayrollPage() {
   const [payslipTarget, setPayslipTarget] = useState<PayrollRow | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
 
+  const [bonuses, setBonuses] = useState<(BonusAllowance & { employees: { first_name: string; last_name: string } | null })[]>([]);
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [bonusEmp, setBonusEmp] = useState("");
+  const [bonusType, setBonusType] = useState<BonusAllowance["type"]>("bonus");
+  const [bonusAmount, setBonusAmount] = useState("");
+  const [bonusDesc, setBonusDesc] = useState("");
+  const [bonusSubmitting, setBonusSubmitting] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
   const loadPayroll = async () => {
     setLoading(true);
     setError(null);
@@ -164,6 +173,19 @@ export default function PayrollPage() {
     }
     setPayroll((data as PayrollRow[]) || []);
     setLoading(false);
+
+    const monthNum = MONTHS.indexOf(month) + 1;
+    const [bonusRes, empRes] = await Promise.all([
+      supabase
+        .from("bonuses_allowances")
+        .select("*, employees!bonuses_allowances_employee_id_fkey(first_name, last_name)")
+        .eq("month", monthNum)
+        .eq("year", year)
+        .order("created_at", { ascending: false }),
+      supabase.from("employees").select("id, first_name, last_name").eq("status", "active"),
+    ]);
+    if (!bonusRes.error) setBonuses((bonusRes.data as any[]) || []);
+    if (!empRes.error) setEmployees((empRes.data as Employee[]) || []);
   };
 
   useEffect(() => {
@@ -185,6 +207,37 @@ export default function PayrollPage() {
     const paidCount = payroll.filter((p) => p.status === "paid").length;
     return { total, paid, pending, paidCount };
   }, [payroll]);
+
+  const bonusSummary = useMemo(() => {
+    const addTypes: BonusAllowance["type"][] = ["bonus", "allowance"];
+    const deductTypes: BonusAllowance["type"][] = ["deduction", "epf", "socso", "pcb"];
+    const additions = bonuses.filter((b) => addTypes.includes(b.type)).reduce((s, b) => s + Number(b.amount || 0), 0);
+    const deductions = bonuses.filter((b) => deductTypes.includes(b.type)).reduce((s, b) => s + Number(b.amount || 0), 0);
+    return { additions, deductions, net: additions - deductions };
+  }, [bonuses]);
+
+  const addBonus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bonusEmp || !bonusAmount) return;
+    setBonusSubmitting(true);
+    const monthNum = MONTHS.indexOf(month) + 1;
+    const { error } = await supabase.from("bonuses_allowances").insert({
+      employee_id: bonusEmp,
+      type: bonusType,
+      amount: Number(bonusAmount),
+      description: bonusDesc || null,
+      month: monthNum,
+      year,
+    });
+    setBonusSubmitting(false);
+    if (!error) {
+      setShowBonusModal(false);
+      setBonusEmp("");
+      setBonusAmount("");
+      setBonusDesc("");
+      loadPayroll();
+    }
+  };
 
   const handleRunPayroll = async () => {
     setRunning(true);
@@ -590,6 +643,110 @@ export default function PayrollPage() {
           </div>
         )}
       </div>
+
+      <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-brand-navy">Bonuses &amp; Allowances</h2>
+            <p className="text-sm text-slate-500">{month} {year}</p>
+          </div>
+          <button onClick={() => setShowBonusModal(true)} className="inline-flex items-center gap-2 rounded-xl bg-brand-orange px-4 py-2 text-sm font-semibold text-white shadow-glow hover:bg-brand-orangeDark">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            Add Item
+          </button>
+        </div>
+        {bonuses.length === 0 ? (
+          <div className="py-12 text-center text-sm text-slate-400">No bonuses or allowances for this period.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3 font-semibold">Employee</th>
+                  <th className="px-5 py-3 font-semibold">Type</th>
+                  <th className="px-5 py-3 font-semibold">Description</th>
+                  <th className="px-5 py-3 text-right font-semibold">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {bonuses.map((b) => {
+                  const name = `${b.employees?.first_name ?? ""} ${b.employees?.last_name ?? ""}`.trim();
+                  const isDeduct = ["deduction", "epf", "socso", "pcb"].includes(b.type);
+                  return (
+                    <tr key={b.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-3 font-medium text-brand-navy">{name || "Unknown"}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${isDeduct ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+                          {b.type.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">{b.description || "—"}</td>
+                      <td className={`px-5 py-3 text-right font-semibold ${isDeduct ? "text-red-600" : "text-emerald-600"}`}>
+                        {isDeduct ? "-" : "+"}{formatRM(Number(b.amount) || 0)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                  <td colSpan={3} className="px-5 py-3 text-right text-sm font-semibold text-slate-600">Total Additions:</td>
+                  <td className="px-5 py-3 text-right font-bold text-emerald-600">{formatRM(bonusSummary.additions)}</td>
+                </tr>
+                <tr className="bg-slate-50">
+                  <td colSpan={3} className="px-5 py-3 text-right text-sm font-semibold text-slate-600">Total Deductions:</td>
+                  <td className="px-5 py-3 text-right font-bold text-red-600">-{formatRM(bonusSummary.deductions)}</td>
+                </tr>
+                <tr className="bg-slate-100">
+                  <td colSpan={3} className="px-5 py-3 text-right text-sm font-bold text-brand-navy">Net Impact:</td>
+                  <td className={`px-5 py-3 text-right font-bold ${bonusSummary.net >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatRM(bonusSummary.net)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showBonusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-card">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-brand-navy">Add Bonus / Allowance / Deduction</h2>
+              <button onClick={() => setShowBonusModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={addBonus} className="space-y-4 px-6 py-5">
+              <Field label="Employee">
+                <select value={bonusEmp} onChange={(e) => setBonusEmp(e.target.value)} className={inputClass} required>
+                  <option value="">Select employee</option>
+                  {employees.map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                </select>
+              </Field>
+              <Field label="Type">
+                <select value={bonusType} onChange={(e) => setBonusType(e.target.value as BonusAllowance["type"])} className={inputClass}>
+                  <option value="bonus">Bonus</option>
+                  <option value="allowance">Allowance</option>
+                  <option value="deduction">Deduction</option>
+                  <option value="epf">EPF</option>
+                  <option value="socso">SOCSO</option>
+                  <option value="pcb">PCB (Tax)</option>
+                </select>
+              </Field>
+              <Field label="Amount (RM)">
+                <input type="number" step="0.01" value={bonusAmount} onChange={(e) => setBonusAmount(e.target.value)} className={inputClass} placeholder="0.00" required />
+              </Field>
+              <Field label="Description">
+                <input type="text" value={bonusDesc} onChange={(e) => setBonusDesc(e.target.value)} className={inputClass} placeholder="e.g. Performance bonus Q4" />
+              </Field>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowBonusModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={bonusSubmitting} className="rounded-xl bg-brand-orange px-5 py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-orangeDark disabled:opacity-60">{bonusSubmitting ? "Saving..." : "Save"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/40 p-4 backdrop-blur-sm">

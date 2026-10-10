@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Employee, Attendance, LeaveRequest, Department } from "@/types";
+import { useAuth } from "@/lib/auth";
+import type { Employee, Attendance, LeaveRequest, Department, Announcement } from "@/types";
 import {
   BarChart,
   Bar,
@@ -55,6 +56,7 @@ interface DashboardData {
   attendance: Attendance[];
   leaveRequests: LeaveRequest[];
   departments: Department[];
+  announcements: Announcement[];
 }
 
 const KpiCard = ({
@@ -167,6 +169,28 @@ const statusStyles: Record<string, string> = {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { role } = useAuth();
+  const [showAnnounce, setShowAnnounce] = useState(false);
+  const [annTitle, setAnnTitle] = useState("");
+  const [annContent, setAnnContent] = useState("");
+  const [annSubmitting, setAnnSubmitting] = useState(false);
+
+  const postAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annTitle.trim() || !annContent.trim()) return;
+    setAnnSubmitting(true);
+    const { error } = await supabase.from("announcements").insert({
+      title: annTitle.trim(),
+      content: annContent.trim(),
+    });
+    setAnnSubmitting(false);
+    if (!error) {
+      setAnnTitle("");
+      setAnnContent("");
+      setShowAnnounce(false);
+      setData((prev) => prev ? { ...prev, announcements: [{ id: crypto.randomUUID(), title: annTitle.trim(), content: annContent.trim(), created_by: null, created_at: new Date().toISOString() }, ...prev.announcements].slice(0, 3) } : prev);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -181,6 +205,7 @@ export default function DashboardPage() {
         { data: attendance, error: attErr },
         { data: leaveRequests, error: leaveErr },
         { data: departments, error: deptErr },
+        { data: announcements, error: annErr },
       ] = await Promise.all([
         supabase
           .from("employees")
@@ -194,9 +219,14 @@ export default function DashboardPage() {
           .lte("date", endDate),
         supabase.from("leave_requests").select("*"),
         supabase.from("departments").select("*"),
+        supabase
+          .from("announcements")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(3),
       ]);
 
-      if (empErr || attErr || leaveErr || deptErr) {
+      if (empErr || attErr || leaveErr || deptErr || annErr) {
         if (active) setLoading(false);
         return;
       }
@@ -207,6 +237,7 @@ export default function DashboardPage() {
           attendance: attendance as Attendance[],
           leaveRequests: leaveRequests as LeaveRequest[],
           departments: departments as Department[],
+          announcements: announcements as Announcement[],
         });
         setLoading(false);
       }
@@ -232,7 +263,7 @@ export default function DashboardPage() {
     );
   }
 
-  const { employees, attendance, leaveRequests, departments } = data;
+  const { employees, attendance, leaveRequests, departments, announcements } = data;
   const today = todayISO();
   const yesterday = daysAgoISO(1);
 
@@ -327,6 +358,78 @@ export default function DashboardPage() {
           trendNeutral
         />
       </div>
+
+      {announcements.length > 0 && (
+        <div className="rounded-2xl bg-gradient-to-r from-brand-navy to-slate-800 p-5 shadow-card">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6" />
+              </svg>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Announcements</h2>
+            </div>
+            {(role === "admin" || role === "hr") && (
+              <button onClick={() => setShowAnnounce(true)} className="rounded-lg bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-orangeDark">
+                + Post
+              </button>
+            )}
+          </div>
+          <div className="space-y-2">
+            {announcements.map((a) => (
+              <div key={a.id} className="rounded-xl bg-white/5 p-3">
+                <p className="text-sm font-semibold text-white">{a.title}</p>
+                <p className="mt-1 text-sm text-slate-300 line-clamp-2">{a.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {announcements.length === 0 && (role === "admin" || role === "hr") && (
+        <div className="rounded-2xl bg-gradient-to-r from-brand-navy to-slate-800 p-5 shadow-card">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6" />
+              </svg>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Announcements</h2>
+            </div>
+            <button onClick={() => setShowAnnounce(true)} className="rounded-lg bg-brand-orange px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-orangeDark">
+              + Post
+            </button>
+          </div>
+          <p className="text-sm text-slate-400">No announcements yet. Post your first company update.</p>
+        </div>
+      )}
+
+      {showAnnounce && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-card">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-brand-navy">Post Announcement</h2>
+              <button onClick={() => setShowAnnounce(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={postAnnouncement} className="space-y-4 px-6 py-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Title</label>
+                <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20" placeholder="Announcement title" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Content</label>
+                <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} rows={4} className="w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20" placeholder="Write your announcement..." />
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowAnnounce(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={annSubmitting} className="rounded-xl bg-brand-orange px-5 py-2.5 text-sm font-semibold text-white shadow-glow hover:bg-brand-orangeDark disabled:opacity-60">{annSubmitting ? "Posting..." : "Post"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-2xl bg-white p-6 shadow-card lg:col-span-2">
