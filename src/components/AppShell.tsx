@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { usePermissions } from "@/lib/permissions";
 import type { Notification } from "@/types";
 
 const navItems = [
@@ -31,8 +32,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, role, signOut } = useAuth();
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotif, setShowNotif] = useState(false);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    let active = true;
+    const fetchEmployee = async () => {
+      const { data } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("email", user.email)
+        .maybeSingle();
+      if (active && data) setEmployeeId((data as { id: string }).id);
+    };
+    fetchEmployee();
+    return () => { active = false; };
+  }, [user?.email]);
+
+  const { canAccess } = usePermissions(role, employeeId);
+
+  const visibleNavItems = navItems.filter((item) => canAccess(item.href));
 
   useEffect(() => {
     if (!user?.id) return;
@@ -83,7 +104,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="mt-4 flex-1 space-y-1 px-3 pb-4">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link key={item.href} href={item.href}

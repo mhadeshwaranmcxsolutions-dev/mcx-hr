@@ -1,5 +1,15 @@
 export type Role = "admin" | "hr" | "manager" | "employee";
 
+export interface Permission {
+  id: string;
+  role: Role;
+  page: string;
+  user_id: string | null;
+  can_access: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Department {
   id: string;
   name: string;
